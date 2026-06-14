@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import WidgetKit
 
@@ -81,6 +82,7 @@ struct CodexQuotaWidget: Widget {
         .configurationDisplayName("Codex 剩余额度")
         .description("显示 5 小时和 1 周额度的剩余比例与刷新时间。")
         .supportedFamilies([.systemMedium])
+        .containerBackgroundRemovable(true)
     }
 }
 
@@ -88,10 +90,6 @@ private struct CodexQuotaWidgetView: View {
     let entry: CodexQuotaWidgetEntry
 
     var body: some View {
-        let backgroundOpacity = min(0.70, max(0.08, entry.snapshot.widgetBackgroundOpacity ?? 0.18))
-        let backgroundStyle = entry.snapshot.widgetBackgroundStyle ?? .defaultColor
-        let backgroundColor = entry.snapshot.widgetBackgroundColor
-
         HStack(spacing: 18) {
             ring(
                 title: "5小时",
@@ -111,15 +109,7 @@ private struct CodexQuotaWidgetView: View {
         .padding(.vertical, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .containerBackground(for: .widget) {
-            LinearGradient(
-                colors: backgroundColors(
-                    for: backgroundStyle,
-                    customColor: backgroundColor,
-                    opacity: backgroundOpacity
-                ),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            Color.clear
         }
     }
 
@@ -135,7 +125,8 @@ private struct CodexQuotaWidgetView: View {
                 SegmentedRingView(
                     percent: percent,
                     segments: 34,
-                    lineWidth: 8
+                    lineWidth: 8,
+                    size: 118
                 )
 
                 Text(percent.map { "\($0)%" } ?? "--")
@@ -176,71 +167,101 @@ private struct CodexQuotaWidgetView: View {
         )
     }
 
-    private func backgroundColors(
-        for style: WidgetBackgroundStyle,
-        customColor: WidgetBackgroundColor?,
-        opacity: Double
-    ) -> [Color] {
-        let baseColor: WidgetBackgroundColor
-
-        switch style {
-        case .defaultColor:
-            baseColor = WidgetBackgroundColor(red: 0.74, green: 0.76, blue: 0.82)
-        case .custom:
-            baseColor = customColor ?? WidgetBackgroundColor(red: 0.74, green: 0.76, blue: 0.82)
-        }
-
-        let shadowColor = WidgetBackgroundColor(
-            red: max(0, baseColor.red * 0.72),
-            green: max(0, baseColor.green * 0.72),
-            blue: max(0, baseColor.blue * 0.72)
-        )
-
-        return [
-            Color(.sRGB, red: baseColor.red, green: baseColor.green, blue: baseColor.blue, opacity: opacity),
-            Color(.sRGB, red: shadowColor.red, green: shadowColor.green, blue: shadowColor.blue, opacity: max(0.06, opacity - 0.06)),
-        ]
-    }
 }
 
 private struct SegmentedRingView: View {
     let percent: Int?
     let segments: Int
     let lineWidth: CGFloat
+    let size: CGFloat
 
     var body: some View {
-        GeometryReader { geometry in
-            let side = min(geometry.size.width, geometry.size.height)
-            let radius = side / 2 - lineWidth / 2
-            let filledCount = Int((Double(percent ?? 0) / 100) * Double(segments))
-            let segmentLength = max(6, radius * 0.18)
-            let step = 360 / Double(segments)
+        let nsImage = SegmentedRingRenderer.image(
+            percent: percent,
+            segments: segments,
+            lineWidth: lineWidth,
+            size: size
+        )
+        let image = Image(nsImage: nsImage)
 
-            ZStack {
-                ForEach(0..<segments, id: \.self) { index in
-                    let angle = 90 + Double(index) * step
-                    let radians = angle * .pi / 180
-
-                    Capsule(style: .circular)
-                        .fill(segmentColor(index: index, filledCount: filledCount))
-                        .frame(width: segmentLength, height: lineWidth)
-                        .rotationEffect(.degrees(angle + 90))
-                        .position(
-                            x: geometry.size.width / 2 + CGFloat(cos(radians)) * radius,
-                            y: geometry.size.height / 2 + CGFloat(sin(radians)) * radius
-                        )
-                }
-            }
-            .frame(width: geometry.size.width, height: geometry.size.height)
+        if #available(macOS 15.0, *) {
+            image
+                .widgetAccentedRenderingMode(.fullColor)
+                .frame(width: size, height: size)
+        } else {
+            image
+                .frame(width: size, height: size)
         }
     }
+}
 
-    private func segmentColor(index: Int, filledCount: Int) -> Color {
+private enum SegmentedRingRenderer {
+    static func image(
+        percent: Int?,
+        segments: Int,
+        lineWidth: CGFloat,
+        size: CGFloat
+    ) -> NSImage {
+        let image = NSImage(size: CGSize(width: size, height: size))
+        image.lockFocus()
+        defer { image.unlockFocus() }
+
+        guard let context = NSGraphicsContext.current?.cgContext else {
+            return image
+        }
+
+        context.clear(CGRect(x: 0, y: 0, width: size, height: size))
+
+        let radius = size / 2 - lineWidth / 2
+        let filledCount = Int((Double(percent ?? 0) / 100) * Double(segments))
+        let segmentLength = max(6, radius * 0.18)
+        let step = 360 / Double(segments)
+
+        for index in 0..<segments {
+            let angle = 90 + Double(index) * step
+            let radians = angle * .pi / 180
+            let center = CGPoint(
+                x: size / 2 + CGFloat(cos(radians)) * radius,
+                y: size / 2 - CGFloat(sin(radians)) * radius
+            )
+
+            context.saveGState()
+            context.translateBy(x: center.x, y: center.y)
+            context.rotate(by: CGFloat(-(angle + 90) * .pi / 180))
+
+            let rect = CGRect(
+                x: -segmentLength / 2,
+                y: -lineWidth / 2,
+                width: segmentLength,
+                height: lineWidth
+            )
+            let path = CGPath(
+                roundedRect: rect,
+                cornerWidth: lineWidth / 2,
+                cornerHeight: lineWidth / 2,
+                transform: nil
+            )
+
+            context.setFillColor(segmentColor(index: index, filledCount: filledCount, segments: segments))
+            context.addPath(path)
+            context.fillPath()
+            context.restoreGState()
+        }
+
+        return image
+    }
+
+    private static func segmentColor(index: Int, filledCount: Int, segments: Int) -> CGColor {
         guard index < filledCount else {
-            return Color.white.opacity(0.09)
+            return CGColor(gray: 1, alpha: 0.09)
         }
 
         let normalized = Double(index) / Double(max(1, segments - 1))
-        return Color(hue: 0.33 * normalized, saturation: 0.92, brightness: 0.98)
+        return NSColor(
+            hue: CGFloat(0.33 * normalized),
+            saturation: 0.92,
+            brightness: 0.98,
+            alpha: 1
+        ).cgColor
     }
 }

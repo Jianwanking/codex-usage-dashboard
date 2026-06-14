@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct ContentView: View {
@@ -20,7 +19,6 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 28) {
                     header
                     quotaPreview
-                    appearancePanel
                     statusPanel
                 }
                 .padding(32)
@@ -38,6 +36,11 @@ struct ContentView: View {
                 Text("宿主 App 会读取本机 Codex 会话数据，把最新快照写进 App Group，Widget 只消费这份共享 JSON。")
                     .font(.system(size: 14, weight: .medium, design: .rounded))
                     .foregroundStyle(Color.white.opacity(0.65))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("当前 Widget 背景已切到 macOS 原生桌面玻璃样式，系统会接管背景呈现，不再做自定义颜色和透明度。")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(0.48))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -63,9 +66,6 @@ struct ContentView: View {
             PreviewRingCard(
                 title: "5小时",
                 percent: viewModel.snapshot.fiveHourRemainingPercent,
-                backgroundOpacity: viewModel.widgetBackgroundOpacity,
-                backgroundStyle: viewModel.widgetBackgroundStyle,
-                backgroundColor: viewModel.widgetBackgroundColor,
                 refreshText: previewRefreshText(
                     resetAt: viewModel.snapshot.fiveHourResetAt,
                     style: .fiveHour
@@ -75,128 +75,12 @@ struct ContentView: View {
             PreviewRingCard(
                 title: "1周",
                 percent: viewModel.snapshot.weekRemainingPercent,
-                backgroundOpacity: viewModel.widgetBackgroundOpacity,
-                backgroundStyle: viewModel.widgetBackgroundStyle,
-                backgroundColor: viewModel.widgetBackgroundColor,
                 refreshText: previewRefreshText(
                     resetAt: viewModel.snapshot.weekResetAt,
                     style: .week
                 )
             )
         }
-    }
-
-    private var appearancePanel: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("背景设置")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
-
-                Spacer()
-
-                Text("\(Int(viewModel.widgetBackgroundOpacity * 100))%")
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color.white.opacity(0.62))
-            }
-
-            Slider(
-                value: Binding(
-                    get: { viewModel.widgetBackgroundOpacity },
-                    set: { viewModel.setWidgetBackgroundOpacity($0) }
-                ),
-                in: 0.08...0.70
-            )
-            .tint(.white)
-
-            HStack(spacing: 14) {
-                Button {
-                    viewModel.setWidgetBackgroundStyle(.defaultColor)
-                } label: {
-                    HStack(spacing: 10) {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(previewGradient(for: nil, opacity: 0.42))
-                            .frame(width: 44, height: 28)
-
-                        Text("默认颜色")
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
-                            .foregroundStyle(.white)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(
-                                viewModel.widgetBackgroundStyle == .defaultColor
-                                    ? Color.white.opacity(0.12)
-                                    : Color.white.opacity(0.05)
-                            )
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(
-                                viewModel.widgetBackgroundStyle == .defaultColor
-                                    ? Color.white.opacity(0.24)
-                                    : Color.white.opacity(0.08),
-                                lineWidth: 1
-                            )
-                    )
-                }
-                .buttonStyle(.plain)
-
-                ColorPicker(
-                    "自定义颜色",
-                    selection: Binding(
-                        get: { color(from: viewModel.widgetBackgroundColor) },
-                        set: { newColor in
-                            if let customColor = widgetBackgroundColor(from: newColor) {
-                                viewModel.setWidgetBackgroundColor(customColor)
-                            }
-                        }
-                    ),
-                    supportsOpacity: false
-                )
-                .labelsHidden()
-
-                HStack(spacing: 10) {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(previewGradient(for: viewModel.widgetBackgroundColor, opacity: 0.42))
-                        .frame(width: 44, height: 28)
-
-                    Text("自定义颜色")
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(
-                            viewModel.widgetBackgroundStyle == .custom
-                                ? Color.white.opacity(0.12)
-                                : Color.white.opacity(0.05)
-                        )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(
-                            viewModel.widgetBackgroundStyle == .custom
-                                ? Color.white.opacity(0.24)
-                                : Color.white.opacity(0.08),
-                            lineWidth: 1
-                        )
-                )
-            }
-        }
-        .padding(24)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color.white.opacity(0.06))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
     }
 
     private var statusPanel: some View {
@@ -259,55 +143,11 @@ struct ContentView: View {
         )
     }
 
-    private func previewGradient(for color: WidgetBackgroundColor?, opacity: Double) -> LinearGradient {
-        let colors = widgetBackgroundColors(for: color, opacity: opacity)
-        return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
-
-    private func widgetBackgroundColors(for backgroundColor: WidgetBackgroundColor?, opacity: Double) -> [Color] {
-        let baseColor = backgroundColor ?? WidgetBackgroundColor(red: 0.74, green: 0.76, blue: 0.82)
-        let shadowColor = WidgetBackgroundColor(
-            red: max(0, baseColor.red * 0.72),
-            green: max(0, baseColor.green * 0.72),
-            blue: max(0, baseColor.blue * 0.72)
-        )
-
-        return [
-            color(from: baseColor).opacity(opacity),
-            color(from: shadowColor).opacity(max(0.06, opacity - 0.06)),
-        ]
-    }
-
-    private func color(from widgetColor: WidgetBackgroundColor) -> Color {
-        Color(
-            .sRGB,
-            red: widgetColor.red,
-            green: widgetColor.green,
-            blue: widgetColor.blue,
-            opacity: 1
-        )
-    }
-
-    private func widgetBackgroundColor(from color: Color) -> WidgetBackgroundColor? {
-        let nsColor = NSColor(color).usingColorSpace(.deviceRGB)
-        guard let nsColor else {
-            return nil
-        }
-
-        return WidgetBackgroundColor(
-            red: Double(nsColor.redComponent),
-            green: Double(nsColor.greenComponent),
-            blue: Double(nsColor.blueComponent)
-        )
-    }
 }
 
 private struct PreviewRingCard: View {
     let title: String
     let percent: Int?
-    let backgroundOpacity: Double
-    let backgroundStyle: WidgetBackgroundStyle
-    let backgroundColor: WidgetBackgroundColor
     let refreshText: String
 
     var body: some View {
@@ -342,40 +182,12 @@ private struct PreviewRingCard: View {
         .padding(.horizontal, 18)
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: backgroundColors,
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(Color.white.opacity(0.07))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                .stroke(Color.white.opacity(0.10), lineWidth: 1)
         )
-    }
-
-    private var backgroundColors: [Color] {
-        let baseColor: WidgetBackgroundColor
-
-        switch backgroundStyle {
-        case .defaultColor:
-            baseColor = WidgetBackgroundColor(red: 0.74, green: 0.76, blue: 0.82)
-        case .custom:
-            baseColor = backgroundColor
-        }
-
-        let shadowColor = WidgetBackgroundColor(
-            red: max(0, baseColor.red * 0.72),
-            green: max(0, baseColor.green * 0.72),
-            blue: max(0, baseColor.blue * 0.72)
-        )
-
-        return [
-            Color(.sRGB, red: baseColor.red, green: baseColor.green, blue: baseColor.blue, opacity: backgroundOpacity),
-            Color(.sRGB, red: shadowColor.red, green: shadowColor.green, blue: shadowColor.blue, opacity: max(0.06, backgroundOpacity - 0.06)),
-        ]
     }
 }
 
