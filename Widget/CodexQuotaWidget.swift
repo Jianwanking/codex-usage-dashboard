@@ -90,7 +90,7 @@ private struct CodexQuotaWidgetView: View {
     let entry: CodexQuotaWidgetEntry
 
     var body: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: 22) {
             ring(
                 title: "5小时",
                 percent: entry.snapshot.fiveHourRemainingPercent,
@@ -105,8 +105,8 @@ private struct CodexQuotaWidgetView: View {
                 style: .week
             )
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .containerBackground(for: .widget) {
             Color.clear
@@ -120,18 +120,18 @@ private struct CodexQuotaWidgetView: View {
         resetAt: Date?,
         style: QuotaRefreshStyle
     ) -> some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 4) {
             ZStack {
                 DoubleSegmentedRingView(
                     quotaPercent: percent,
                     timeProgress: remainingWindowProgress(style: style, resetAt: resetAt),
-                    segments: 34,
-                    size: 116
+                    segments: 40,
+                    size: 122
                 )
 
                 VStack(spacing: 4) {
                     Text(percent.map { "\($0)%" } ?? "--")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .font(.system(size: 30, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
                         .minimumScaleFactor(0.72)
                         .lineLimit(1)
@@ -143,11 +143,11 @@ private struct CodexQuotaWidgetView: View {
                         .minimumScaleFactor(0.8)
                 }
             }
-            .frame(width: 116, height: 116)
+            .frame(width: 122, height: 122)
 
             Text(title)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color.white.opacity(0.68))
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color.white.opacity(0.66))
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -243,7 +243,7 @@ private enum SegmentedRingRenderer {
             progress: quotaProgress,
             segments: segments,
             lineWidth: 8,
-            radius: size / 2 - 4,
+            radius: size / 2 - 5,
             size: size,
             palette: .gauge
         )
@@ -252,7 +252,7 @@ private enum SegmentedRingRenderer {
             progress: timeProgress,
             segments: segments,
             lineWidth: 7,
-            radius: size / 2 - 22,
+            radius: size / 2 - 24,
             size: size,
             palette: .monochrome
         )
@@ -270,7 +270,7 @@ private enum SegmentedRingRenderer {
         palette: GaugeSegmentPalette
     ) {
         let filledCount = Int((min(max(progress ?? 0, 0), 1) * Double(segments)).rounded())
-        let segmentLength = max(6, radius * 0.18)
+        let segmentLength = max(6, radius * 0.155)
         let step = 360 / Double(segments)
 
         for index in 0..<segments {
