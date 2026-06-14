@@ -242,7 +242,8 @@ private enum SegmentedRingRenderer {
             in: context,
             progress: quotaProgress,
             segments: segments,
-            lineWidth: 8,
+            blockSize: 6,
+            blockRadius: 2,
             radius: size / 2 - 5,
             size: size,
             palette: .gauge
@@ -251,7 +252,8 @@ private enum SegmentedRingRenderer {
             in: context,
             progress: timeProgress,
             segments: segments,
-            lineWidth: 7,
+            blockSize: 4.5,
+            blockRadius: 1.5,
             radius: size / 2 - 24,
             size: size,
             palette: .monochrome
@@ -264,13 +266,13 @@ private enum SegmentedRingRenderer {
         in context: CGContext,
         progress: Double?,
         segments: Int,
-        lineWidth: CGFloat,
+        blockSize: CGFloat,
+        blockRadius: CGFloat,
         radius: CGFloat,
         size: CGFloat,
         palette: GaugeSegmentPalette
     ) {
         let filledCount = Int((min(max(progress ?? 0, 0), 1) * Double(segments)).rounded())
-        let segmentLength = max(6, radius * 0.155)
         let step = 360 / Double(segments)
 
         for index in 0..<segments {
@@ -286,15 +288,15 @@ private enum SegmentedRingRenderer {
             context.rotate(by: CGFloat(-(angle + 90) * .pi / 180))
 
             let rect = CGRect(
-                x: -segmentLength / 2,
-                y: -lineWidth / 2,
-                width: segmentLength,
-                height: lineWidth
+                x: -blockSize / 2,
+                y: -blockSize / 2,
+                width: blockSize,
+                height: blockSize
             )
             let path = CGPath(
                 roundedRect: rect,
-                cornerWidth: lineWidth / 2,
-                cornerHeight: lineWidth / 2,
+                cornerWidth: blockRadius,
+                cornerHeight: blockRadius,
                 transform: nil
             )
 

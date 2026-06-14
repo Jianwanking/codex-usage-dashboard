@@ -122,3 +122,9 @@ Cause: `34` 段和 `116pt` 圆环在中号 Widget 中显得块大且稀，内外
 Solution: 将圆环调整为 `122pt`、`40` 段，收紧垂直 padding，略增左右间距和中心百分比/底部标题字号，同时缩短每个分段长度，让内外圈更像同一套仪表盘语言。
 Verification: `swift run CodexQuotaWidgetVerification` 通过；`xcodebuild -project CodexQuotaDesktop.xcodeproj -scheme CodexQuotaDesktop -configuration Debug CODE_SIGNING_ALLOWED=NO build` 通过。
 Avoid next time: 双环视觉优先调整体比例、段数和内外圈间距，不要只调字体；中号 Widget 里 `122pt` 左右是当前更平衡的圆环尺寸。
+
+Issue: 圆环段块看起来像圆点或胶囊，不够硬朗。
+Cause: CoreGraphics 分段块使用 `cornerWidth = lineWidth / 2`，圆角半径等于半个块高时会把小段块视觉上圆化。
+Solution: 将分段绘制参数改成明确的 `blockSize` 和 `blockRadius`：外圈 `6/2`，内圈 `4.5/1.5`，让每段成为带小圆角的方块。
+Verification: `swift run CodexQuotaWidgetVerification` 通过；`xcodebuild -project CodexQuotaDesktop.xcodeproj -scheme CodexQuotaDesktop -configuration Debug CODE_SIGNING_ALLOWED=NO build` 通过。
+Avoid next time: 仪表盘风格段块不要用尺寸派生的满圆角；圆角应作为独立视觉参数维护。
