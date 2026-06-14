@@ -90,23 +90,26 @@ private struct CodexQuotaWidgetView: View {
     let entry: CodexQuotaWidgetEntry
 
     var body: some View {
-        HStack(spacing: 18) {
-            ring(
-                title: "5小时",
-                percent: entry.snapshot.fiveHourRemainingPercent,
-                resetAt: entry.snapshot.fiveHourResetAt,
-                style: .fiveHour
-            )
+        VStack(spacing: 7) {
+            HStack(spacing: 22) {
+                ring(
+                    title: "5小时",
+                    percent: entry.snapshot.fiveHourRemainingPercent
+                )
 
-            ring(
-                title: "1周",
-                percent: entry.snapshot.weekRemainingPercent,
-                resetAt: entry.snapshot.weekResetAt,
-                style: .week
-            )
+                ring(
+                    title: "1周",
+                    percent: entry.snapshot.weekRemainingPercent
+                )
+            }
+
+            VStack(spacing: 5) {
+                timeProgressRow(style: .fiveHour, resetAt: entry.snapshot.fiveHourResetAt)
+                timeProgressRow(style: .week, resetAt: entry.snapshot.weekResetAt)
+            }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .containerBackground(for: .widget) {
             Color.clear
@@ -116,54 +119,122 @@ private struct CodexQuotaWidgetView: View {
     @ViewBuilder
     private func ring(
         title: String,
-        percent: Int?,
-        resetAt: Date?,
-        style: QuotaRefreshStyle
+        percent: Int?
     ) -> some View {
-        VStack(spacing: 6) {
-            ZStack {
-                SegmentedRingView(
-                    percent: percent,
-                    segments: 34,
-                    lineWidth: 8,
-                    size: 118
-                )
+        ZStack {
+            SegmentedRingView(
+                percent: percent,
+                segments: 34,
+                lineWidth: 7,
+                size: 92
+            )
 
+            VStack(spacing: 3) {
                 Text(percent.map { "\($0)%" } ?? "--")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(.system(size: 26, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                     .minimumScaleFactor(0.75)
                     .lineLimit(1)
-                    .offset(y: -3)
 
-                Text(refreshText(percent: percent, resetAt: resetAt, style: style))
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color.white.opacity(0.62))
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(0.68))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                    .offset(y: 24)
             }
-            .frame(width: 118, height: 118)
-
-            Text(title)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color.white.opacity(0.68))
-                .lineLimit(1)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(width: 104, height: 92)
+        .frame(maxWidth: .infinity)
     }
 
-    private func refreshText(percent: Int?, resetAt: Date?, style: QuotaRefreshStyle) -> String {
-        guard let percent, let resetAt else {
-            return "暂无数据"
+    private func timeProgressRow(style: QuotaRefreshStyle, resetAt: Date?) -> some View {
+        let progress = remainingWindowProgress(style: style, resetAt: resetAt)
+        let leading = resetAt == nil ? "--" : timeLabel(for: entry.date, style: style)
+        let trailing = resetAt.map { timeLabel(for: $0, style: style) } ?? "--"
+
+        return HStack(spacing: 8) {
+            Text(leading)
+                .frame(width: 50, alignment: .trailing)
+
+            SegmentedBarView(
+                progress: progress,
+                segments: 24,
+                size: CGSize(width: 166, height: 8)
+            )
+
+            Text(trailing)
+                .frame(width: 50, alignment: .leading)
+        }
+        .font(.system(size: 12, weight: .semibold, design: .rounded))
+        .foregroundStyle(Color.white.opacity(0.88))
+        .lineLimit(1)
+        .minimumScaleFactor(0.75)
+    }
+
+    private func remainingWindowProgress(style: QuotaRefreshStyle, resetAt: Date?) -> Double? {
+        guard let resetAt else {
+            return nil
         }
 
-        return QuotaRefreshFormatter.displayText(
-            for: QuotaRingSnapshot(label: "", remainingPercent: percent, resetAt: resetAt),
-            style: style,
-            now: entry.date,
-            locale: Locale(identifier: "zh_Hans_CN"),
-            timeZone: .current
+        let duration: TimeInterval
+        switch style {
+        case .fiveHour:
+            duration = 300 * 60
+        case .week:
+            duration = 10_080 * 60
+        }
+
+        let remaining = resetAt.timeIntervalSince(entry.date)
+        return min(max(remaining / duration, 0), 1)
+    }
+
+    private func timeLabel(for date: Date, style: QuotaRefreshStyle) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_Hans_CN")
+        formatter.timeZone = .current
+
+        switch style {
+        case .fiveHour:
+            formatter.dateFormat = "HH:mm"
+        case .week:
+            formatter.dateFormat = "M月d日"
+        }
+
+        return formatter.string(from: date)
+    }
+
+}
+
+private struct FullColorWidgetImage: View {
+    let nsImage: NSImage
+    let size: CGSize
+
+    var body: some View {
+        let image = Image(nsImage: nsImage)
+
+        if #available(macOS 15.0, *) {
+            image
+                .widgetAccentedRenderingMode(.fullColor)
+                .frame(width: size.width, height: size.height)
+        } else {
+            image
+                .frame(width: size.width, height: size.height)
+        }
+    }
+}
+
+private struct SegmentedBarView: View {
+    let progress: Double?
+    let segments: Int
+    let size: CGSize
+
+    var body: some View {
+        FullColorWidgetImage(
+            nsImage: SegmentedBarRenderer.image(
+                progress: progress,
+                segments: segments,
+                size: size
+            ),
+            size: size
         )
     }
 
@@ -182,16 +253,50 @@ private struct SegmentedRingView: View {
             lineWidth: lineWidth,
             size: size
         )
-        let image = Image(nsImage: nsImage)
+        FullColorWidgetImage(nsImage: nsImage, size: CGSize(width: size, height: size))
+    }
+}
 
-        if #available(macOS 15.0, *) {
-            image
-                .widgetAccentedRenderingMode(.fullColor)
-                .frame(width: size, height: size)
-        } else {
-            image
-                .frame(width: size, height: size)
+private enum SegmentedBarRenderer {
+    static func image(
+        progress: Double?,
+        segments: Int,
+        size: CGSize
+    ) -> NSImage {
+        let image = NSImage(size: size)
+        image.lockFocus()
+        defer { image.unlockFocus() }
+
+        guard let context = NSGraphicsContext.current?.cgContext else {
+            return image
         }
+
+        context.clear(CGRect(origin: .zero, size: size))
+
+        let gap: CGFloat = 4
+        let segmentWidth = (size.width - CGFloat(max(0, segments - 1)) * gap) / CGFloat(segments)
+        let filledCount = Int((min(max(progress ?? 0, 0), 1) * Double(segments)).rounded())
+
+        for index in 0..<segments {
+            let rect = CGRect(
+                x: CGFloat(index) * (segmentWidth + gap),
+                y: 0,
+                width: segmentWidth,
+                height: size.height
+            )
+            let path = CGPath(
+                roundedRect: rect,
+                cornerWidth: size.height / 2,
+                cornerHeight: size.height / 2,
+                transform: nil
+            )
+
+            context.setFillColor(GaugeSegmentPalette.color(index: index, filledCount: filledCount, segments: segments))
+            context.addPath(path)
+            context.fillPath()
+        }
+
+        return image
     }
 }
 
@@ -242,7 +347,7 @@ private enum SegmentedRingRenderer {
                 transform: nil
             )
 
-            context.setFillColor(segmentColor(index: index, filledCount: filledCount, segments: segments))
+            context.setFillColor(GaugeSegmentPalette.color(index: index, filledCount: filledCount, segments: segments))
             context.addPath(path)
             context.fillPath()
             context.restoreGState()
@@ -250,8 +355,10 @@ private enum SegmentedRingRenderer {
 
         return image
     }
+}
 
-    private static func segmentColor(index: Int, filledCount: Int, segments: Int) -> CGColor {
+private enum GaugeSegmentPalette {
+    static func color(index: Int, filledCount: Int, segments: Int) -> CGColor {
         guard index < filledCount else {
             return CGColor(gray: 1, alpha: 0.09)
         }

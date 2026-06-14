@@ -104,3 +104,9 @@ Cause: 透明/强调类 Widget 外观会进入 `WidgetRenderingMode.vibrant` 或
 Solution: 将 Widget 内的分段圆环从 SwiftUI `Capsule` 形状改为用 `NSImage` / CoreGraphics 预渲染，然后对 `Image(nsImage:)` 在 macOS 15+ 应用 `.widgetAccentedRenderingMode(.fullColor)`，尝试在透明背景下保留红黄绿圆环。  
 Verification: `swift run CodexQuotaWidgetVerification` 与 Release `xcodebuild` 均通过；实际视觉需要在系统“小组件样式 = 透明”下观察圆环是否仍保留全彩。  
 Avoid next time: 想在透明/强调 Widget 外观下保留复杂自绘彩色内容时，优先考虑把彩色内容栅格化成 Image，再标记 fullColor。
+
+Issue: 中号 Widget 需要同时展示双额度圆环和刷新窗口进度，空间很紧。
+Cause: 原先 `118pt` 圆环加圈外标签几乎占满高度，无法再放两条时间进度条；如果把条形进度也用 SwiftUI 彩色形状绘制，还可能在透明小组件样式下被系统去色。
+Solution: 将圆环缩到 `92pt`，把“5小时 / 1周”移回圈内第二行，底部新增两条 `NSImage` / CoreGraphics 预渲染的分段时间条：左侧显示当前时间/日期，右侧显示刷新时间/日期，条形填充按剩余窗口时间从红到绿显示。
+Verification: `swift run CodexQuotaWidgetVerification` 通过；`xcodebuild -project CodexQuotaDesktop.xcodeproj -scheme CodexQuotaDesktop -configuration Debug CODE_SIGNING_ALLOWED=NO build` 通过。
+Avoid next time: 中号 Widget 加信息密度时，先缩减已有 UI 的外部标签，再新增底部信息；彩色分段内容继续走预渲染 Image，避免透明模式下丢色。
