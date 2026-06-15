@@ -66,15 +66,19 @@ public enum CodexQuotaSnapshotBuilder {
 
         let contents = try String(contentsOf: rolloutPath, encoding: .utf8)
         var latestEvent: TokenCountEvent?
+        var latestOverallEvent: TokenCountEvent?
 
         contents.enumerateLines { line, _ in
             guard let event = parseTokenCountEvent(from: line) else {
                 return
             }
             latestEvent = event
+            if event.limitID == "codex" {
+                latestOverallEvent = event
+            }
         }
 
-        return latestEvent
+        return latestOverallEvent ?? latestEvent
     }
 
     private static func parseTokenCountEvent(from line: String) -> TokenCountEvent? {
@@ -93,7 +97,8 @@ public enum CodexQuotaSnapshotBuilder {
         return TokenCountEvent(
             primary: parseQuotaValue(from: rateLimits["primary"]),
             secondary: parseQuotaValue(from: rateLimits["secondary"]),
-            planType: rateLimits["plan_type"] as? String
+            planType: rateLimits["plan_type"] as? String,
+            limitID: rateLimits["limit_id"] as? String
         )
     }
 
@@ -122,6 +127,7 @@ private struct TokenCountEvent {
     let primary: QuotaValue?
     let secondary: QuotaValue?
     let planType: String?
+    let limitID: String?
 }
 
 private struct QuotaValue {

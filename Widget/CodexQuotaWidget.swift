@@ -83,6 +83,7 @@ struct CodexQuotaWidget: Widget {
         .description("显示 5 小时和 1 周额度的剩余比例与刷新时间。")
         .supportedFamilies([.systemMedium])
         .containerBackgroundRemovable(true)
+        .contentMarginsDisabled()
     }
 }
 
@@ -90,65 +91,92 @@ private struct CodexQuotaWidgetView: View {
     let entry: CodexQuotaWidgetEntry
 
     var body: some View {
-        HStack(spacing: 22) {
-            ring(
-                title: "5小时",
-                percent: entry.snapshot.fiveHourRemainingPercent,
-                resetAt: entry.snapshot.fiveHourResetAt,
-                style: .fiveHour
-            )
+        GeometryReader { proxy in
+            let spacing = min(max(proxy.size.width * 0.04, 10), 18)
+            let verticalInset: CGFloat = 6
+            let titleHeight: CGFloat = 16
+            let ringTitleGap: CGFloat = 0
+            let cellWidth = max(0, (proxy.size.width - spacing) / 2)
+            let ringSize = max(0, min(cellWidth, proxy.size.height - verticalInset * 2 - titleHeight - ringTitleGap, 136))
 
-            ring(
-                title: "1周",
-                percent: entry.snapshot.weekRemainingPercent,
-                resetAt: entry.snapshot.weekResetAt,
-                style: .week
-            )
+            HStack(spacing: spacing) {
+                gauge(
+                    title: "5小时",
+                    percent: entry.snapshot.fiveHourRemainingPercent,
+                    resetAt: entry.snapshot.fiveHourResetAt,
+                    style: .fiveHour,
+                    ringSize: ringSize,
+                    titleHeight: titleHeight,
+                    ringTitleGap: ringTitleGap
+                )
+                .frame(width: cellWidth, height: proxy.size.height)
+
+                gauge(
+                    title: "1周",
+                    percent: entry.snapshot.weekRemainingPercent,
+                    resetAt: entry.snapshot.weekResetAt,
+                    style: .week,
+                    ringSize: ringSize,
+                    titleHeight: titleHeight,
+                    ringTitleGap: ringTitleGap
+                )
+                .frame(width: cellWidth, height: proxy.size.height)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .containerBackground(for: .widget) {
             Color.clear
         }
     }
 
-    @ViewBuilder
-    private func ring(
+    private func gauge(
         title: String,
         percent: Int?,
         resetAt: Date?,
-        style: QuotaRefreshStyle
+        style: QuotaRefreshStyle,
+        ringSize: CGFloat,
+        titleHeight: CGFloat,
+        ringTitleGap: CGFloat
     ) -> some View {
-        VStack(spacing: 4) {
+        let percentFontSize: CGFloat = 30
+        let refreshFontSize: CGFloat = 12.5
+        let titleFontSize: CGFloat = 14
+
+        return VStack(spacing: ringTitleGap) {
             ZStack {
                 DoubleSegmentedRingView(
                     quotaPercent: percent,
                     timeProgress: remainingWindowProgress(style: style, resetAt: resetAt),
-                    segments: 40,
-                    size: 122
+                    segments: 36,
+                    size: ringSize,
+                    outerRadius: 61.788,
+                    innerRadius: 49.0
                 )
 
-                VStack(spacing: 4) {
-                    Text(percent.map { "\($0)%" } ?? "--")
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .minimumScaleFactor(0.72)
-                        .lineLimit(1)
+                Text(percent.map { "\($0)%" } ?? "--")
+                    .font(.system(size: percentFontSize, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(width: ringSize * 0.62, height: ringSize * 0.30)
+                    .minimumScaleFactor(0.82)
+                    .lineLimit(1)
+                    .offset(y: -ringSize * 0.035)
 
-                    Text(refreshText(percent: percent, resetAt: resetAt, style: style))
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.64))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
+                Text(refreshText(percent: percent, resetAt: resetAt, style: style))
+                    .font(.system(size: refreshFontSize, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(0.64))
+                    .frame(width: ringSize * 0.62, height: ringSize * 0.14)
+                    .minimumScaleFactor(0.78)
+                    .lineLimit(1)
+                    .offset(y: ringSize * 0.18)
             }
-            .frame(width: 122, height: 122)
+            .frame(width: ringSize, height: ringSize)
 
             Text(title)
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(.system(size: titleFontSize, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color.white.opacity(0.66))
+                .frame(width: ringSize * 0.58, height: titleHeight)
                 .lineLimit(1)
+                .offset(y: -1)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -209,13 +237,17 @@ private struct DoubleSegmentedRingView: View {
     let timeProgress: Double?
     let segments: Int
     let size: CGFloat
+    let outerRadius: CGFloat
+    let innerRadius: CGFloat
 
     var body: some View {
         let nsImage = SegmentedRingRenderer.image(
             quotaProgress: quotaPercent.map { Double($0) / 100 },
             timeProgress: timeProgress,
             segments: segments,
-            size: size
+            size: size,
+            outerRadius: outerRadius,
+            innerRadius: innerRadius
         )
         FullColorWidgetImage(nsImage: nsImage, size: CGSize(width: size, height: size))
     }
@@ -226,7 +258,9 @@ private enum SegmentedRingRenderer {
         quotaProgress: Double?,
         timeProgress: Double?,
         segments: Int,
-        size: CGFloat
+        size: CGFloat,
+        outerRadius: CGFloat,
+        innerRadius: CGFloat
     ) -> NSImage {
         let image = NSImage(size: CGSize(width: size, height: size))
         image.lockFocus()
@@ -242,9 +276,9 @@ private enum SegmentedRingRenderer {
             in: context,
             progress: quotaProgress,
             segments: segments,
-            blockSize: 6,
-            blockRadius: 2,
-            radius: size / 2 - 5,
+            blockSize: 8.0,
+            blockRadius: 1.8,
+            radius: outerRadius,
             size: size,
             palette: .gauge
         )
@@ -252,9 +286,9 @@ private enum SegmentedRingRenderer {
             in: context,
             progress: timeProgress,
             segments: segments,
-            blockSize: 4.5,
-            blockRadius: 1.5,
-            radius: size / 2 - 24,
+            blockSize: 5.6,
+            blockRadius: 1.3,
+            radius: innerRadius,
             size: size,
             palette: .monochrome
         )
@@ -327,10 +361,11 @@ private enum GaugeSegmentPalette {
                 alpha: 1
             ).cgColor
         case .monochrome:
-            let normalized = Double(index) / Double(max(1, filledCount - 1))
             return NSColor(
-                calibratedWhite: CGFloat(0.58 + 0.26 * normalized),
-                alpha: 0.82
+                red: 0.72,
+                green: 0.86,
+                blue: 0.90,
+                alpha: 0.85
             ).cgColor
         }
     }

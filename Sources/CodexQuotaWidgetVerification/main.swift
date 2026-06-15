@@ -5,6 +5,7 @@ import CodexQuotaWidget
 struct CodexQuotaWidgetVerification {
     static func main() throws {
         try testBuildsSnapshotFromLatestTokenCountEvent()
+        try testPrefersOverallCodexLimitOverLaterModelLimit()
         try testFallsBackToNextRolloutPathWhenFirstHasNoTokenCount()
         try testReturnsUnavailableWhenNoValidTokenCountExists()
         try testFormatsRefreshText()
@@ -45,6 +46,37 @@ struct CodexQuotaWidgetVerification {
         expect(
             snapshot.weekResetAt == Date(timeIntervalSince1970: 1_781_752_999),
             "Expected week reset date"
+        )
+    }
+
+    private static func testPrefersOverallCodexLimitOverLaterModelLimit() throws {
+        let tempDir = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let rollout = tempDir.appendingPathComponent("rollout.jsonl")
+        try writeLines(
+            [
+                #"{"timestamp":"2026-06-14T23:31:53.088Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"limit_id":"codex","primary":{"used_percent":3.0,"window_minutes":300,"resets_at":1781497727},"secondary":{"used_percent":12.0,"window_minutes":10080,"resets_at":1781752999},"plan_type":"prolite"}}}"#,
+                #"{"timestamp":"2026-06-14T23:37:57.844Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"limit_id":"codex_bengalfox","limit_name":"GPT-5.3-Codex-Spark","primary":{"used_percent":0.0,"window_minutes":300,"resets_at":1781498263},"secondary":{"used_percent":0.0,"window_minutes":10080,"resets_at":1782085063},"plan_type":"prolite"}}}"#
+            ],
+            to: rollout
+        )
+
+        let snapshot = try CodexQuotaSnapshotBuilder.build(
+            fromRolloutPaths: [rollout],
+            now: Date(timeIntervalSince1970: 1_781_490_000)
+        )
+
+        expect(snapshot.state == .ok, "Expected ok state for overall codex limit")
+        expect(snapshot.fiveHourRemainingPercent == 97, "Expected five-hour value from codex limit")
+        expect(snapshot.weekRemainingPercent == 88, "Expected week value from codex limit")
+        expect(
+            snapshot.fiveHourResetAt == Date(timeIntervalSince1970: 1_781_497_727),
+            "Expected five-hour reset from codex limit"
+        )
+        expect(
+            snapshot.weekResetAt == Date(timeIntervalSince1970: 1_781_752_999),
+            "Expected week reset from codex limit"
         )
     }
 

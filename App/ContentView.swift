@@ -66,6 +66,8 @@ struct ContentView: View {
             PreviewRingCard(
                 title: "5小时",
                 percent: viewModel.snapshot.fiveHourRemainingPercent,
+                resetAt: viewModel.snapshot.fiveHourResetAt,
+                style: .fiveHour,
                 refreshText: previewRefreshText(
                     resetAt: viewModel.snapshot.fiveHourResetAt,
                     style: .fiveHour
@@ -75,6 +77,8 @@ struct ContentView: View {
             PreviewRingCard(
                 title: "1周",
                 percent: viewModel.snapshot.weekRemainingPercent,
+                resetAt: viewModel.snapshot.weekResetAt,
+                style: .week,
                 refreshText: previewRefreshText(
                     resetAt: viewModel.snapshot.weekResetAt,
                     style: .week
@@ -148,34 +152,41 @@ struct ContentView: View {
 private struct PreviewRingCard: View {
     let title: String
     let percent: Int?
+    let resetAt: Date?
+    let style: QuotaRefreshStyle
     let refreshText: String
 
     var body: some View {
         VStack(spacing: 12) {
             ZStack {
-                PreviewSegmentedRingView(
-                    percent: percent,
-                    segments: 34,
-                    lineWidth: 12
+                PreviewDoubleSegmentedRingView(
+                    quotaPercent: percent,
+                    timeProgress: remainingWindowProgress,
+                    segments: 36
                 )
 
                 Text(percent.map { "\($0)%" } ?? "--")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
-                    .offset(y: -4)
+                    .minimumScaleFactor(0.82)
+                    .lineLimit(1)
+                    .frame(width: 92, height: 42)
+                    .offset(y: -5)
 
                 Text(refreshText)
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .font(.system(size: 12.5, weight: .medium, design: .rounded))
                     .foregroundStyle(Color.white.opacity(0.66))
-                    .minimumScaleFactor(0.85)
+                    .minimumScaleFactor(0.78)
                     .lineLimit(1)
-                    .offset(y: 28)
+                    .frame(width: 92, height: 20)
+                    .offset(y: 30)
             }
-            .frame(width: 154, height: 154)
+            .frame(width: 166, height: 166)
 
             Text(title)
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color.white.opacity(0.62))
+                .offset(y: -1)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 22)
@@ -189,46 +200,104 @@ private struct PreviewRingCard: View {
                 .stroke(Color.white.opacity(0.10), lineWidth: 1)
         )
     }
+
+    private var remainingWindowProgress: Double? {
+        guard let resetAt else {
+            return nil
+        }
+
+        let duration: TimeInterval
+        switch style {
+        case .fiveHour:
+            duration = 300 * 60
+        case .week:
+            duration = 10_080 * 60
+        }
+
+        let remaining = resetAt.timeIntervalSince(Date())
+        return min(max(remaining / duration, 0), 1)
+    }
 }
 
-private struct PreviewSegmentedRingView: View {
-    let percent: Int?
+private struct PreviewDoubleSegmentedRingView: View {
+    let quotaPercent: Int?
+    let timeProgress: Double?
     let segments: Int
-    let lineWidth: CGFloat
 
     var body: some View {
         GeometryReader { geometry in
             let side = min(geometry.size.width, geometry.size.height)
-            let radius = side / 2 - lineWidth / 2
-            let filledCount = Int((Double(percent ?? 0) / 100) * Double(segments))
-            let segmentLength = max(10, radius * 0.22)
-            let step = 360 / Double(segments)
+            let scale = side / 136
+            let outerRadius = 61.788 * scale
+            let innerRadius = 49.0 * scale
 
             ZStack {
-                ForEach(0..<segments, id: \.self) { index in
-                    let angle = 90 + Double(index) * step
-                    let radians = angle * .pi / 180
+                ring(
+                    progress: quotaPercent.map { Double($0) / 100 },
+                    radius: outerRadius,
+                    blockSize: 8.0 * scale,
+                    blockRadius: 1.8 * scale,
+                    palette: .gauge,
+                    geometry: geometry
+                )
 
-                    Capsule(style: .circular)
-                        .fill(segmentColor(index: index, filledCount: filledCount))
-                        .frame(width: segmentLength, height: lineWidth)
-                        .rotationEffect(.degrees(angle + 90))
-                        .position(
-                            x: geometry.size.width / 2 + CGFloat(cos(radians)) * radius,
-                            y: geometry.size.height / 2 + CGFloat(sin(radians)) * radius
-                        )
-                }
+                ring(
+                    progress: timeProgress,
+                    radius: innerRadius,
+                    blockSize: 5.6 * scale,
+                    blockRadius: 1.3 * scale,
+                    palette: .monochrome,
+                    geometry: geometry
+                )
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
     }
 
-    private func segmentColor(index: Int, filledCount: Int) -> Color {
+    private func ring(
+        progress: Double?,
+        radius: CGFloat,
+        blockSize: CGFloat,
+        blockRadius: CGFloat,
+        palette: PreviewSegmentPalette,
+        geometry: GeometryProxy
+    ) -> some View {
+        let filledCount = Int((min(max(progress ?? 0, 0), 1) * Double(segments)).rounded())
+        let step = 360 / Double(segments)
+
+        return ZStack {
+            ForEach(0..<segments, id: \.self) { index in
+                let angle = 90 + Double(index) * step
+                let radians = angle * .pi / 180
+
+                RoundedRectangle(cornerRadius: blockRadius, style: .continuous)
+                    .fill(palette.color(index: index, filledCount: filledCount, segments: segments))
+                    .frame(width: blockSize, height: blockSize)
+                    .rotationEffect(.degrees(angle + 90))
+                    .position(
+                        x: geometry.size.width / 2 + CGFloat(cos(radians)) * radius,
+                        y: geometry.size.height / 2 - CGFloat(sin(radians)) * radius
+                    )
+            }
+        }
+    }
+}
+
+private enum PreviewSegmentPalette {
+    case gauge
+    case monochrome
+
+    func color(index: Int, filledCount: Int, segments: Int) -> Color {
         guard index < filledCount else {
-            return Color.white.opacity(0.08)
+            return Color.white.opacity(0.09)
         }
 
-        let normalized = Double(index) / Double(max(1, segments - 1))
-        return Color(hue: 0.33 * normalized, saturation: 0.92, brightness: 0.98)
+        switch self {
+        case .gauge:
+            let normalized = Double(index) / Double(max(1, segments - 1))
+            return Color(hue: 0.33 * normalized, saturation: 0.92, brightness: 0.98)
+        case .monochrome:
+            return Color(red: 0.72, green: 0.86, blue: 0.90).opacity(0.85)
+        }
     }
 }
