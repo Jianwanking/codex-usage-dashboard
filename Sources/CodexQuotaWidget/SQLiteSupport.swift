@@ -157,7 +157,7 @@ public struct SQLiteCodexLogProvider {
         defer { try? database.close() }
 
         let sql = """
-        SELECT id, ts, ts_nanos, target, feedback_log_body
+        SELECT ts, ts_nanos, target, feedback_log_body
         FROM logs
         WHERE feedback_log_body IS NOT NULL
           AND (
@@ -173,18 +173,16 @@ public struct SQLiteCodexLogProvider {
         """
 
         return try database.queryRows(sql).compactMap { row in
-            guard row.count == 5,
-                  let id = row[0].flatMap(Int.init),
-                  let ts = row[1].flatMap(Int.init),
-                  let tsNanos = row[2].flatMap(Int.init),
-                  let target = row[3],
-                  let body = row[4]
+            guard row.count == 4,
+                  let ts = row[0].flatMap(Int.init),
+                  let tsNanos = row[1].flatMap(Int.init),
+                  let target = row[2],
+                  let body = row[3]
             else {
                 return nil
             }
 
             return CodexLogRow(
-                id: id,
                 timestampSeconds: ts,
                 timestampNanoseconds: tsNanos,
                 target: target,
@@ -195,20 +193,17 @@ public struct SQLiteCodexLogProvider {
 }
 
 public struct CodexLogRow {
-    public let id: Int
     public let timestampSeconds: Int
     public let timestampNanoseconds: Int
     public let target: String
     public let body: String
 
     public init(
-        id: Int,
         timestampSeconds: Int,
         timestampNanoseconds: Int,
         target: String,
         body: String
     ) {
-        self.id = id
         self.timestampSeconds = timestampSeconds
         self.timestampNanoseconds = timestampNanoseconds
         self.target = target

@@ -146,10 +146,6 @@ public extension CodexQuotaSnapshot {
         sourceEventAt ?? snapshotAt
     }
 
-    func isOlderThan(_ other: CodexQuotaSnapshot) -> Bool {
-        freshnessDate < other.freshnessDate
-    }
-
     func shouldBeReplaced(by candidate: CodexQuotaSnapshot) -> Bool {
         guard state == .ok else {
             return true
