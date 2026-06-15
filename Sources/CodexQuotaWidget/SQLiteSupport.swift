@@ -81,6 +81,42 @@ public final class SQLiteDatabase {
         return rows
     }
 
+    public func queryRows(_ sql: String) throws -> [[String?]] {
+        guard let handle else {
+            throw SQLiteError.step("Database is closed")
+        }
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw SQLiteError.prepareStatement(lastErrorMessage(from: handle))
+        }
+        defer { sqlite3_finalize(statement) }
+
+        let columnCount = sqlite3_column_count(statement)
+        var rows: [[String?]] = []
+        while true {
+            let result = sqlite3_step(statement)
+            if result == SQLITE_ROW {
+                var row: [String?] = []
+                for index in 0..<columnCount {
+                    if let text = sqlite3_column_text(statement, index) {
+                        row.append(String(cString: text))
+                    } else {
+                        row.append(nil)
+                    }
+                }
+                rows.append(row)
+                continue
+            }
+            if result == SQLITE_DONE {
+                break
+            }
+            throw SQLiteError.step(lastErrorMessage(from: handle))
+        }
+
+        return rows
+    }
+
     private func lastErrorMessage(from handle: OpaquePointer) -> String {
         String(cString: sqlite3_errmsg(handle))
     }
@@ -106,5 +142,76 @@ public struct SQLiteThreadPathProvider {
         """
 
         return try database.queryStrings(sql).map { URL(fileURLWithPath: $0) }
+    }
+}
+
+public struct SQLiteCodexLogProvider {
+    public let databasePath: URL
+
+    public init(databasePath: URL) {
+        self.databasePath = databasePath
+    }
+
+    public func recentRateLimitLogRows(limit: Int) throws -> [CodexLogRow] {
+        let database = try SQLiteDatabase(path: databasePath.path)
+        defer { try? database.close() }
+
+        let sql = """
+        SELECT id, ts, ts_nanos, target, feedback_log_body
+        FROM logs
+        WHERE feedback_log_body IS NOT NULL
+          AND (
+            (target = 'codex_api::endpoint::responses_websocket'
+              AND feedback_log_body LIKE '%websocket event:%"type":"codex.rate_limits"%')
+            OR
+            (target = 'codex_client::default_client'
+              AND feedback_log_body LIKE '%headers={%'
+              AND feedback_log_body LIKE '%x-codex-primary-used-percent%')
+          )
+        ORDER BY ts DESC, ts_nanos DESC, id DESC
+        LIMIT \(max(1, limit));
+        """
+
+        return try database.queryRows(sql).compactMap { row in
+            guard row.count == 5,
+                  let id = row[0].flatMap(Int.init),
+                  let ts = row[1].flatMap(Int.init),
+                  let tsNanos = row[2].flatMap(Int.init),
+                  let target = row[3],
+                  let body = row[4]
+            else {
+                return nil
+            }
+
+            return CodexLogRow(
+                id: id,
+                timestampSeconds: ts,
+                timestampNanoseconds: tsNanos,
+                target: target,
+                body: body
+            )
+        }
+    }
+}
+
+public struct CodexLogRow {
+    public let id: Int
+    public let timestampSeconds: Int
+    public let timestampNanoseconds: Int
+    public let target: String
+    public let body: String
+
+    public init(
+        id: Int,
+        timestampSeconds: Int,
+        timestampNanoseconds: Int,
+        target: String,
+        body: String
+    ) {
+        self.id = id
+        self.timestampSeconds = timestampSeconds
+        self.timestampNanoseconds = timestampNanoseconds
+        self.target = target
+        self.body = body
     }
 }

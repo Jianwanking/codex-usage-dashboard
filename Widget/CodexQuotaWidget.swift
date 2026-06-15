@@ -29,30 +29,33 @@ struct CodexQuotaWidgetProvider: TimelineProvider {
             date: Date(),
             snapshot: loadSharedSnapshot()
         )
-        let nextRefresh = Calendar.current.date(byAdding: .minute, value: 15, to: entry.date) ?? entry.date.addingTimeInterval(900)
+        let nextRefresh = Calendar.current.date(byAdding: .minute, value: 1, to: entry.date) ?? entry.date.addingTimeInterval(60)
         completion(Timeline(entries: [entry], policy: .after(nextRefresh)))
     }
 
     private func loadSharedSnapshot() -> CodexQuotaSnapshot {
+        var stores: [SharedSnapshotStore] = []
+
         if let appGroupStore = SharedSnapshotStore.appGroupStore(
             groupIdentifier: CodexQuotaAppConfig.appGroupIdentifier,
             fileName: CodexQuotaAppConfig.snapshotFileName
         ) {
-            do {
-                return try appGroupStore.load()
-            } catch {
-            }
+            stores.append(appGroupStore)
         }
 
-        let fallbackStore = SharedSnapshotStore.localFallbackStore(
-            fileName: CodexQuotaAppConfig.snapshotFileName
+        stores.append(
+            SharedSnapshotStore.appContainerFallbackStore(
+                bundleIdentifier: CodexQuotaAppConfig.widgetExtensionBundleIdentifier,
+                fileName: CodexQuotaAppConfig.snapshotFileName
+            )
+        )
+        stores.append(
+            SharedSnapshotStore.localFallbackStore(
+                fileName: CodexQuotaAppConfig.snapshotFileName
+            )
         )
 
-        guard let snapshot = try? fallbackStore.load() else {
-            return .unavailable(at: Date())
-        }
-
-        return snapshot
+        return SharedSnapshotStore.newestOKSnapshot(from: stores) ?? .unavailable(at: Date())
     }
 
     private var sampleSnapshot: CodexQuotaSnapshot {

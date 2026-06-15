@@ -43,6 +43,7 @@ public struct CodexQuotaSnapshot: Codable, Equatable, Sendable {
     public let snapshotAt: Date
     public let planType: String?
     public let sourceRolloutPath: String?
+    public let sourceEventAt: Date?
     public let widgetBackgroundOpacity: Double?
     public let widgetBackgroundStyle: WidgetBackgroundStyle?
     public let widgetBackgroundColor: WidgetBackgroundColor?
@@ -56,6 +57,7 @@ public struct CodexQuotaSnapshot: Codable, Equatable, Sendable {
         snapshotAt: Date,
         planType: String?,
         sourceRolloutPath: String?,
+        sourceEventAt: Date? = nil,
         widgetBackgroundOpacity: Double? = nil,
         widgetBackgroundStyle: WidgetBackgroundStyle? = nil,
         widgetBackgroundColor: WidgetBackgroundColor? = nil
@@ -68,6 +70,7 @@ public struct CodexQuotaSnapshot: Codable, Equatable, Sendable {
         self.snapshotAt = snapshotAt
         self.planType = planType
         self.sourceRolloutPath = sourceRolloutPath
+        self.sourceEventAt = sourceEventAt
         self.widgetBackgroundOpacity = widgetBackgroundOpacity
         self.widgetBackgroundStyle = widgetBackgroundStyle
         self.widgetBackgroundColor = widgetBackgroundColor
@@ -83,6 +86,7 @@ public struct CodexQuotaSnapshot: Codable, Equatable, Sendable {
             snapshotAt: snapshotAt,
             planType: nil,
             sourceRolloutPath: nil,
+            sourceEventAt: nil,
             widgetBackgroundOpacity: nil,
             widgetBackgroundStyle: nil,
             widgetBackgroundColor: nil
@@ -103,6 +107,7 @@ public struct CodexQuotaSnapshot: Codable, Equatable, Sendable {
             snapshotAt: snapshotAt,
             planType: planType,
             sourceRolloutPath: sourceRolloutPath,
+            sourceEventAt: sourceEventAt,
             widgetBackgroundOpacity: opacity,
             widgetBackgroundStyle: style,
             widgetBackgroundColor: color

@@ -14,6 +14,7 @@ final class QuotaDashboardViewModel: ObservableObject {
     private var refreshTimer: Timer?
     private var stateWatcher: FileWatcher?
     private var rolloutWatcher: FileWatcher?
+    private var sourceSidecarWatcher: FileWatcher?
 
     private static let widgetBackgroundOpacityKey = "widgetBackgroundOpacity"
     private static let widgetBackgroundStyleKey = "widgetBackgroundStyle"
@@ -48,15 +49,28 @@ final class QuotaDashboardViewModel: ObservableObject {
         let now = Date()
 
         do {
-            let latestSnapshot = applyWidgetAppearance(
+            let candidateSnapshot = applyWidgetAppearance(
                 to: try CodexQuotaSnapshotBuilder.buildFromLocalCodexState(now: now)
             )
-            snapshot = latestSnapshot
             lastErrorMessage = nil
             lastRefreshDate = now
-            try persist(snapshot: latestSnapshot)
-            configureRolloutWatcher(for: latestSnapshot.sourceRolloutPath)
+
+            guard snapshot.shouldBeReplaced(by: candidateSnapshot) else {
+                WidgetCenter.shared.reloadAllTimelines()
+                return
+            }
+
+            snapshot = candidateSnapshot
+            try persist(snapshot: candidateSnapshot)
+            configureRolloutWatcher(for: candidateSnapshot.sourceRolloutPath)
         } catch {
+            if snapshot.state == .ok {
+                lastErrorMessage = error.localizedDescription
+                lastRefreshDate = now
+                WidgetCenter.shared.reloadAllTimelines()
+                return
+            }
+
             let unavailableSnapshot = applyWidgetAppearance(
                 to: CodexQuotaSnapshot.unavailable(at: now)
             )
@@ -126,7 +140,7 @@ final class QuotaDashboardViewModel: ObservableObject {
     }
 
     private func startRefreshTimer() {
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.refresh()
             }
@@ -144,6 +158,7 @@ final class QuotaDashboardViewModel: ObservableObject {
 
     private func configureRolloutWatcher(for path: String?) {
         rolloutWatcher = nil
+        sourceSidecarWatcher = nil
 
         guard let path else {
             return
@@ -152,6 +167,15 @@ final class QuotaDashboardViewModel: ObservableObject {
         rolloutWatcher = FileWatcher(url: URL(fileURLWithPath: path)) { [weak self] in
             Task { @MainActor [weak self] in
                 self?.refresh()
+            }
+        }
+
+        if path == CodexQuotaPaths.defaultLogsDatabaseURL.path {
+            let walURL = URL(fileURLWithPath: path + "-wal")
+            sourceSidecarWatcher = FileWatcher(url: walURL) { [weak self] in
+                Task { @MainActor [weak self] in
+                    self?.refresh()
+                }
             }
         }
     }
@@ -211,4 +235,5 @@ final class QuotaDashboardViewModel: ObservableObject {
 
         return try? JSONDecoder().decode(WidgetBackgroundColor.self, from: data)
     }
+
 }

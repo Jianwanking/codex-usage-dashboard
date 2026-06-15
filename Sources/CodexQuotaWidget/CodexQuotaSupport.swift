@@ -14,6 +14,13 @@ public enum CodexQuotaPaths {
             .appendingPathComponent("sqlite")
             .appendingPathComponent("state_5.sqlite")
     }
+
+    public static var defaultLogsDatabaseURL: URL {
+        URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent(".codex")
+            .appendingPathComponent("sqlite")
+            .appendingPathComponent("logs_2.sqlite")
+    }
 }
 
 public enum QuotaRefreshFormatter {
@@ -75,6 +82,15 @@ public struct SharedSnapshotStore {
         return try decoder.decode(CodexQuotaSnapshot.self, from: data)
     }
 
+    public static func newestOKSnapshot(from stores: [SharedSnapshotStore]) -> CodexQuotaSnapshot? {
+        stores
+            .compactMap { try? $0.load() }
+            .filter { $0.state == .ok }
+            .max { lhs, rhs in
+                lhs.freshnessDate < rhs.freshnessDate
+            }
+    }
+
     #if canImport(AppKit)
     public static func appGroupStore(
         groupIdentifier: String,
@@ -122,5 +138,37 @@ public struct SharedSnapshotStore {
                 .appendingPathComponent(CodexQuotaAppConfig.fallbackDirectoryName)
                 .appendingPathComponent(fileName)
         )
+    }
+}
+
+public extension CodexQuotaSnapshot {
+    var freshnessDate: Date {
+        sourceEventAt ?? snapshotAt
+    }
+
+    func isOlderThan(_ other: CodexQuotaSnapshot) -> Bool {
+        freshnessDate < other.freshnessDate
+    }
+
+    func shouldBeReplaced(by candidate: CodexQuotaSnapshot) -> Bool {
+        guard state == .ok else {
+            return true
+        }
+        guard candidate.state == .ok else {
+            return false
+        }
+
+        if let sourceEventAt {
+            guard let candidateEventAt = candidate.sourceEventAt else {
+                return false
+            }
+            return candidateEventAt >= sourceEventAt
+        }
+
+        if candidate.sourceEventAt != nil {
+            return true
+        }
+
+        return candidate.snapshotAt >= snapshotAt
     }
 }
