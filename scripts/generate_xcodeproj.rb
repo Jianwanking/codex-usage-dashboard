@@ -11,7 +11,7 @@ FileUtils.rm_rf(PROJECT_PATH)
 
 project = Xcodeproj::Project.new(PROJECT_PATH.to_s)
 project.root_object.attributes['LastUpgradeCheck'] = '1600'
-development_team = 'G9K4MNXX8G'
+development_team = ENV.fetch('DEVELOPMENT_TEAM', '')
 
 app_group = project.main_group.new_group('App', 'App')
 widget_group = project.main_group.new_group('Widget', 'Widget')
@@ -36,7 +36,7 @@ def configure_target(target, settings)
     config.build_settings['MARKETING_VERSION'] = '1.0'
     config.build_settings['CURRENT_PROJECT_VERSION'] = '1'
     config.build_settings['CODE_SIGN_STYLE'] = 'Automatic'
-    config.build_settings['DEVELOPMENT_TEAM'] = development_team
+    config.build_settings['DEVELOPMENT_TEAM'] = development_team unless development_team.empty?
     config.build_settings['GENERATE_INFOPLIST_FILE'] = 'NO'
     config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
     config.build_settings['LD_RUNPATH_SEARCH_PATHS'] = [
@@ -55,7 +55,7 @@ configure_target(
   app_target,
   info_plist: 'App/Info.plist',
   entitlements: 'App/CodexQuotaDesktop.entitlements',
-  bundle_id: 'com.ck.CodexQuotaDesktop',
+  bundle_id: 'com.example.CodexUsageDashboard',
   product_name: 'CodexQuotaDesktop',
   'SWIFT_EMIT_LOC_STRINGS' => 'NO'
 )
@@ -64,7 +64,7 @@ configure_target(
   widget_target,
   info_plist: 'Widget/Info.plist',
   entitlements: 'Widget/CodexQuotaDesktopWidget.entitlements',
-  bundle_id: 'com.ck.CodexQuotaDesktop.widget',
+  bundle_id: 'com.example.CodexUsageDashboard.widget',
   product_name: 'CodexQuotaDesktopWidget',
   'APPLICATION_EXTENSION_API_ONLY' => 'YES',
   'SKIP_INSTALL' => 'YES',

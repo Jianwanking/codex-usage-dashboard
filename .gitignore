@@ -6,3 +6,7 @@ DerivedData/
 .swiftpm/configuration/registries.json
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
 .netrc
+/dist/
+/rate-limit-*.js
+/usage-settings-*.js
+/use-rate-limit-*.js

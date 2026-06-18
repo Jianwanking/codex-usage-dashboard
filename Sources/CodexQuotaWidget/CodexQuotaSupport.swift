@@ -1,10 +1,10 @@
 import Foundation
 
 public enum CodexQuotaAppConfig {
-    public static let appGroupIdentifier = "group.com.ck.codexquota"
+    public static let appGroupIdentifier = "group.com.example.codexusagedashboard"
     public static let snapshotFileName = "quota-snapshot.json"
     public static let fallbackDirectoryName = "CodexQuotaDesktop"
-    public static let widgetExtensionBundleIdentifier = "com.ck.CodexQuotaDesktop.widget"
+    public static let widgetExtensionBundleIdentifier = "com.example.CodexUsageDashboard.widget"
 }
 
 public enum CodexQuotaPaths {

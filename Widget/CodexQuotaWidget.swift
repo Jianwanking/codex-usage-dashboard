@@ -141,9 +141,10 @@ private struct CodexQuotaWidgetView: View {
         titleHeight: CGFloat,
         ringTitleGap: CGFloat
     ) -> some View {
-        let percentFontSize: CGFloat = 30
-        let refreshFontSize: CGFloat = 12.5
-        let titleFontSize: CGFloat = 14
+        let visualScale = ringSize / 136
+        let percentFontSize: CGFloat = 30 * visualScale
+        let refreshFontSize: CGFloat = 12.5 * visualScale
+        let titleFontSize: CGFloat = 14 * visualScale
 
         return VStack(spacing: ringTitleGap) {
             ZStack {
@@ -152,8 +153,7 @@ private struct CodexQuotaWidgetView: View {
                     timeProgress: remainingWindowProgress(style: style, resetAt: resetAt),
                     segments: 36,
                     size: ringSize,
-                    outerRadius: 61.788,
-                    innerRadius: 49.0
+                    visualScale: visualScale
                 )
 
                 Text(entry.snapshot.isFullQuotaFallback ? "??" : (percent.map { "\($0)%" } ?? "--"))
@@ -244,8 +244,7 @@ private struct DoubleSegmentedRingView: View {
     let timeProgress: Double?
     let segments: Int
     let size: CGFloat
-    let outerRadius: CGFloat
-    let innerRadius: CGFloat
+    let visualScale: CGFloat
 
     var body: some View {
         let nsImage = SegmentedRingRenderer.image(
@@ -253,8 +252,7 @@ private struct DoubleSegmentedRingView: View {
             timeProgress: timeProgress,
             segments: segments,
             size: size,
-            outerRadius: outerRadius,
-            innerRadius: innerRadius
+            visualScale: visualScale
         )
         FullColorWidgetImage(nsImage: nsImage, size: CGSize(width: size, height: size))
     }
@@ -266,8 +264,7 @@ private enum SegmentedRingRenderer {
         timeProgress: Double?,
         segments: Int,
         size: CGFloat,
-        outerRadius: CGFloat,
-        innerRadius: CGFloat
+        visualScale: CGFloat
     ) -> NSImage {
         let image = NSImage(size: CGSize(width: size, height: size))
         image.lockFocus()
@@ -283,9 +280,9 @@ private enum SegmentedRingRenderer {
             in: context,
             progress: quotaProgress,
             segments: segments,
-            blockSize: 8.0,
-            blockRadius: 1.8,
-            radius: outerRadius,
+            blockSize: 8.0 * visualScale,
+            blockRadius: 1.8 * visualScale,
+            radius: 61.788 * visualScale,
             size: size,
             palette: .gauge
         )
@@ -293,9 +290,9 @@ private enum SegmentedRingRenderer {
             in: context,
             progress: timeProgress,
             segments: segments,
-            blockSize: 5.6,
-            blockRadius: 1.3,
-            radius: innerRadius,
+            blockSize: 5.6 * visualScale,
+            blockRadius: 1.3 * visualScale,
+            radius: 49.0 * visualScale,
             size: size,
             palette: .monochrome
         )
