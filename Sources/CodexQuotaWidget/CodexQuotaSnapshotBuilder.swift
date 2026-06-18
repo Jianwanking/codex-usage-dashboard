@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 public enum CodexQuotaSnapshotBuilder {
     public static func build(
@@ -80,6 +83,60 @@ public enum CodexQuotaSnapshotBuilder {
         }
 
         return nil
+    }
+
+    @available(macOS 10.15, *)
+    public static func buildFromCodexUsageAPI(
+        authJSONURL: URL = CodexQuotaPaths.defaultAuthJSONURL,
+        usageAPIURL: URL = CodexQuotaPaths.codexUsageAPIURL,
+        now: Date = Date()
+    ) async throws -> CodexQuotaSnapshot? {
+        let token = try accessToken(from: authJSONURL)
+        var request = URLRequest(url: usageAPIURL)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 8
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("Codex Desktop", forHTTPHeaderField: "originator")
+        request.setValue("responses=v1", forHTTPHeaderField: "OpenAI-Beta")
+        request.setValue("codex", forHTTPHeaderField: "OpenAI-Intent")
+        request.setValue("en", forHTTPHeaderField: "OAI-Language")
+
+        let (data, response) = try await fetchData(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode)
+        else {
+            return nil
+        }
+
+        return buildFromCodexUsageResponse(
+            data,
+            sourceURL: authJSONURL,
+            now: now,
+            sourceEventAt: now
+        )
+    }
+
+    public static func buildFromCodexUsageResponse(
+        _ data: Data,
+        sourceURL: URL = CodexQuotaPaths.defaultAuthJSONURL,
+        now: Date = Date(),
+        sourceEventAt: Date = Date()
+    ) -> CodexQuotaSnapshot? {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rateLimit = root["rate_limit"] as? [String: Any]
+        else {
+            return nil
+        }
+
+        let event = TokenCountEvent(
+            primary: parseUsageQuotaValue(from: rateLimit["primary_window"]),
+            secondary: parseUsageQuotaValue(from: rateLimit["secondary_window"]),
+            planType: root["plan_type"] as? String,
+            timestamp: sourceEventAt,
+            limitID: "codex"
+        )
+
+        return snapshot(from: event, sourceURL: sourceURL, now: now)
     }
 
     private static func snapshot(from event: TokenCountEvent, sourceURL: URL, now: Date) -> CodexQuotaSnapshot? {
@@ -214,6 +271,22 @@ public enum CodexQuotaSnapshotBuilder {
         )
     }
 
+    private static func parseUsageQuotaValue(from rawValue: Any?) -> QuotaValue? {
+        guard let rawValue = rawValue as? [String: Any],
+              let usedPercent = doubleValue(rawValue["used_percent"]),
+              let windowSeconds = intValue(rawValue["limit_window_seconds"]),
+              let resetAt = intValue(rawValue["reset_at"])
+        else {
+            return nil
+        }
+
+        return QuotaValue(
+            usedPercent: usedPercent,
+            windowMinutes: windowSeconds / 60,
+            resetAt: resetAt
+        )
+    }
+
     private static func parseQuotaValue(from rawValue: Any?) -> QuotaValue? {
         guard let rawValue = rawValue as? [String: Any],
               let usedPercent = rawValue["used_percent"] as? Double,
@@ -332,6 +405,38 @@ public enum CodexQuotaSnapshotBuilder {
         return nil
     }
 
+    private static func accessToken(from authJSONURL: URL) throws -> String {
+        let data = try Data(contentsOf: authJSONURL)
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let tokens = root["tokens"] as? [String: Any],
+              let accessToken = tokens["access_token"] as? String,
+              !accessToken.isEmpty
+        else {
+            throw CodexUsageAPIError.missingAccessToken
+        }
+
+        return accessToken
+    }
+
+    @available(macOS 10.15, *)
+    private static func fetchData(for request: URLRequest) async throws -> (Data, URLResponse) {
+        try await withCheckedThrowingContinuation { continuation in
+            let task = URLSession.shared.dataTask(with: request) { data, response, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                guard let data, let response else {
+                    continuation.resume(throwing: CodexUsageAPIError.emptyResponse)
+                    return
+                }
+
+                continuation.resume(returning: (data, response))
+            }
+            task.resume()
+        }
+    }
+
     private static func remainingPercent(fromUsedPercent usedPercent: Double) -> Int {
         max(0, min(100, Int((100.0 - usedPercent).rounded())))
     }
@@ -391,6 +496,11 @@ private struct QuotaValue {
     let usedPercent: Double
     let windowMinutes: Int
     let resetAt: Int
+}
+
+private enum CodexUsageAPIError: Error {
+    case missingAccessToken
+    case emptyResponse
 }
 
 private extension CodexLogRow {

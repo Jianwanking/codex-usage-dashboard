@@ -62,23 +62,21 @@ struct ContentView: View {
     }
 
     private var quotaPreview: some View {
-        HStack(spacing: 22) {
-            PreviewRingCard(
+        HStack(spacing: 18) {
+            quotaTextCard(
                 title: "5小时",
                 percent: viewModel.snapshot.fiveHourRemainingPercent,
-                resetAt: viewModel.snapshot.fiveHourResetAt,
-                style: .fiveHour,
+                isFallback: viewModel.snapshot.isFullQuotaFallback,
                 refreshText: previewRefreshText(
                     resetAt: viewModel.snapshot.fiveHourResetAt,
                     style: .fiveHour
                 )
             )
 
-            PreviewRingCard(
+            quotaTextCard(
                 title: "1周",
                 percent: viewModel.snapshot.weekRemainingPercent,
-                resetAt: viewModel.snapshot.weekResetAt,
-                style: .week,
+                isFallback: viewModel.snapshot.isFullQuotaFallback,
                 refreshText: previewRefreshText(
                     resetAt: viewModel.snapshot.weekResetAt,
                     style: .week
@@ -129,7 +127,37 @@ struct ContentView: View {
         }
     }
 
+    private func quotaTextCard(title: String, percent: Int?, isFallback: Bool, refreshText: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color.white.opacity(0.55))
+
+            Text(isFallback ? "??" : (percent.map { "\($0)%" } ?? "--"))
+                .font(.system(size: 38, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+
+            Text(refreshText)
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(Color.white.opacity(0.58))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(22)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(0.06))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+
     private func previewRefreshText(resetAt: Date?, style: QuotaRefreshStyle) -> String {
+        if viewModel.snapshot.isFullQuotaFallback {
+            return ""
+        }
+
         guard let resetAt,
               let percent = style == .fiveHour
                 ? viewModel.snapshot.fiveHourRemainingPercent
@@ -147,157 +175,4 @@ struct ContentView: View {
         )
     }
 
-}
-
-private struct PreviewRingCard: View {
-    let title: String
-    let percent: Int?
-    let resetAt: Date?
-    let style: QuotaRefreshStyle
-    let refreshText: String
-
-    var body: some View {
-        VStack(spacing: 12) {
-            ZStack {
-                PreviewDoubleSegmentedRingView(
-                    quotaPercent: percent,
-                    timeProgress: remainingWindowProgress,
-                    segments: 36
-                )
-
-                Text(percent.map { "\($0)%" } ?? "--")
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .minimumScaleFactor(0.82)
-                    .lineLimit(1)
-                    .frame(width: 92, height: 42)
-                    .offset(y: -5)
-
-                Text(refreshText)
-                    .font(.system(size: 12.5, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color.white.opacity(0.66))
-                    .minimumScaleFactor(0.78)
-                    .lineLimit(1)
-                    .frame(width: 92, height: 20)
-                    .offset(y: 30)
-            }
-            .frame(width: 166, height: 166)
-
-            Text(title)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color.white.opacity(0.62))
-                .offset(y: -1)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 22)
-        .padding(.horizontal, 18)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(Color.white.opacity(0.07))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.white.opacity(0.10), lineWidth: 1)
-        )
-    }
-
-    private var remainingWindowProgress: Double? {
-        guard let resetAt else {
-            return nil
-        }
-
-        let duration: TimeInterval
-        switch style {
-        case .fiveHour:
-            duration = 300 * 60
-        case .week:
-            duration = 10_080 * 60
-        }
-
-        let remaining = resetAt.timeIntervalSince(Date())
-        return min(max(remaining / duration, 0), 1)
-    }
-}
-
-private struct PreviewDoubleSegmentedRingView: View {
-    let quotaPercent: Int?
-    let timeProgress: Double?
-    let segments: Int
-
-    var body: some View {
-        GeometryReader { geometry in
-            let side = min(geometry.size.width, geometry.size.height)
-            let scale = side / 136
-            let outerRadius = 61.788 * scale
-            let innerRadius = 49.0 * scale
-
-            ZStack {
-                ring(
-                    progress: quotaPercent.map { Double($0) / 100 },
-                    radius: outerRadius,
-                    blockSize: 8.0 * scale,
-                    blockRadius: 1.8 * scale,
-                    palette: .gauge,
-                    geometry: geometry
-                )
-
-                ring(
-                    progress: timeProgress,
-                    radius: innerRadius,
-                    blockSize: 5.6 * scale,
-                    blockRadius: 1.3 * scale,
-                    palette: .monochrome,
-                    geometry: geometry
-                )
-            }
-            .frame(width: geometry.size.width, height: geometry.size.height)
-        }
-    }
-
-    private func ring(
-        progress: Double?,
-        radius: CGFloat,
-        blockSize: CGFloat,
-        blockRadius: CGFloat,
-        palette: PreviewSegmentPalette,
-        geometry: GeometryProxy
-    ) -> some View {
-        let filledCount = Int((min(max(progress ?? 0, 0), 1) * Double(segments)).rounded())
-        let step = 360 / Double(segments)
-
-        return ZStack {
-            ForEach(0..<segments, id: \.self) { index in
-                let angle = 90 + Double(index) * step
-                let radians = angle * .pi / 180
-
-                RoundedRectangle(cornerRadius: blockRadius, style: .continuous)
-                    .fill(palette.color(index: index, filledCount: filledCount, segments: segments))
-                    .frame(width: blockSize, height: blockSize)
-                    .rotationEffect(.degrees(angle + 90))
-                    .position(
-                        x: geometry.size.width / 2 + CGFloat(cos(radians)) * radius,
-                        y: geometry.size.height / 2 - CGFloat(sin(radians)) * radius
-                    )
-            }
-        }
-    }
-}
-
-private enum PreviewSegmentPalette {
-    case gauge
-    case monochrome
-
-    func color(index: Int, filledCount: Int, segments: Int) -> Color {
-        guard index < filledCount else {
-            return Color.white.opacity(0.09)
-        }
-
-        switch self {
-        case .gauge:
-            let normalized = Double(index) / Double(max(1, segments - 1))
-            return Color(hue: 0.33 * normalized, saturation: 0.92, brightness: 0.98)
-        case .monochrome:
-            return Color(red: 0.72, green: 0.86, blue: 0.90).opacity(0.85)
-        }
-    }
 }

@@ -9,10 +9,13 @@ struct CodexQuotaWidgetVerification {
         try testSelectsNewestOverallLimitAcrossRecentRollouts()
         try testBuildFromLocalStatePrefersFreshCodexLogs()
         try testBuildFromLocalStateChoosesNewerRolloutOverStaleLogs()
+        try testBuildsSnapshotFromCodexUsageResponse()
         try testIgnoresAssistantTextLogMatches()
         try testReadsLatestOverallLogQuotaOnly()
         try testNewerSourceEventPreventsFallbackOverwrite()
         try testSelectsNewestSnapshotStore()
+        try testFullQuotaFallback()
+        try testMissingSnapshotStoreUsesFallback()
         try testFallsBackToNextRolloutPathWhenFirstHasNoTokenCount()
         try testReturnsUnavailableWhenNoValidTokenCountExists()
         try testFormatsRefreshText()
@@ -273,6 +276,55 @@ struct CodexQuotaWidgetVerification {
         expect(snapshot.sourceRolloutPath == rollout.path, "Expected newer rollout source path")
     }
 
+    private static func testBuildsSnapshotFromCodexUsageResponse() throws {
+        let data = """
+        {
+          "plan_type": "prolite",
+          "rate_limit": {
+            "primary_window": {
+              "used_percent": 19,
+              "limit_window_seconds": 18000,
+              "reset_at": 1781579842
+            },
+            "secondary_window": {
+              "used_percent": 25,
+              "limit_window_seconds": 604800,
+              "reset_at": 1781752999
+            }
+          },
+          "additional_rate_limits": {
+            "codex_bengalfox": {
+              "primary_window": {
+                "used_percent": 0,
+                "limit_window_seconds": 18000,
+                "reset_at": 1781579842
+              },
+              "secondary_window": {
+                "used_percent": 0,
+                "limit_window_seconds": 604800,
+                "reset_at": 1781752999
+              }
+            }
+          }
+        }
+        """.data(using: .utf8)!
+        let authURL = URL(fileURLWithPath: "/tmp/auth.json")
+        let sourceEventAt = Date(timeIntervalSince1970: 1_781_555_000)
+        let snapshot = CodexQuotaSnapshotBuilder.buildFromCodexUsageResponse(
+            data,
+            sourceURL: authURL,
+            now: Date(timeIntervalSince1970: 1_781_555_100),
+            sourceEventAt: sourceEventAt
+        )
+
+        expect(snapshot?.state == .ok, "Expected ok state from usage API response")
+        expect(snapshot?.fiveHourRemainingPercent == 81, "Expected five-hour value from top-level usage API")
+        expect(snapshot?.weekRemainingPercent == 75, "Expected week value from top-level usage API")
+        expect(snapshot?.planType == "prolite", "Expected plan type from usage API")
+        expect(snapshot?.sourceRolloutPath == authURL.path, "Expected auth file source path for live usage API")
+        expect(snapshot?.sourceEventAt == sourceEventAt, "Expected live usage API source event time")
+    }
+
     private static func testReadsLatestOverallLogQuotaOnly() throws {
         let tempDir = try makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: tempDir) }
@@ -377,6 +429,29 @@ struct CodexQuotaWidgetVerification {
         expect(snapshot?.sourceEventAt == Date(timeIntervalSince1970: 1_781_513_900), "Expected newest source event time")
     }
 
+    private static func testFullQuotaFallback() throws {
+        let now = Date(timeIntervalSince1970: 1_781_600_000)
+        let snapshot = CodexQuotaSnapshot.fullQuotaFallback(at: now)
+
+        expect(snapshot.state == .ok, "Expected ok fallback state")
+        expect(snapshot.fiveHourRemainingPercent == 100, "Expected full five-hour fallback")
+        expect(snapshot.weekRemainingPercent == 100, "Expected full week fallback")
+        expect(snapshot.fiveHourResetAt == now.addingTimeInterval(300 * 60), "Expected five-hour fallback reset")
+        expect(snapshot.weekResetAt == now.addingTimeInterval(10_080 * 60), "Expected week fallback reset")
+        expect(snapshot.isFullQuotaFallback, "Expected fallback marker")
+    }
+
+    private static func testMissingSnapshotStoreUsesFallback() throws {
+        let tempDir = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = SharedSnapshotStore(fileURL: tempDir.appendingPathComponent("missing.json"))
+        let snapshot = SharedSnapshotStore.newestOKSnapshot(from: [store])
+            ?? .fullQuotaFallback(at: Date(timeIntervalSince1970: 1_781_600_000))
+
+        expect(snapshot.isFullQuotaFallback, "Expected missing store fallback")
+    }
+
     private static func testFallsBackToNextRolloutPathWhenFirstHasNoTokenCount() throws {
         let tempDir = try makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: tempDir) }
@@ -470,7 +545,7 @@ struct CodexQuotaWidgetVerification {
         )
 
         expect(fiveHourText == "06:36", "Expected five-hour time text")
-        expect(weekDateText == "6月18日", "Expected week date text")
+        expect(weekDateText == "06-18", "Expected week date text")
         expect(weekTimeText == "11:23", "Expected week time text")
     }
 

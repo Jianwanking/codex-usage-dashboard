@@ -21,6 +21,16 @@ public enum CodexQuotaPaths {
             .appendingPathComponent("sqlite")
             .appendingPathComponent("logs_2.sqlite")
     }
+
+    public static var defaultAuthJSONURL: URL {
+        URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent(".codex")
+            .appendingPathComponent("auth.json")
+    }
+
+    public static var codexUsageAPIURL: URL {
+        URL(string: "https://chatgpt.com/backend-api/wham/usage")!
+    }
 }
 
 public enum QuotaRefreshFormatter {
@@ -42,7 +52,7 @@ public enum QuotaRefreshFormatter {
             if ring.resetAt.timeIntervalSince(now) < 86_400 {
                 formatter.dateFormat = "HH:mm"
             } else {
-                formatter.dateFormat = "M月d日"
+                formatter.dateFormat = "MM-dd"
             }
         }
 

@@ -55,7 +55,7 @@ struct CodexQuotaWidgetProvider: TimelineProvider {
             )
         )
 
-        return SharedSnapshotStore.newestOKSnapshot(from: stores) ?? .unavailable(at: Date())
+        return SharedSnapshotStore.newestOKSnapshot(from: stores) ?? .fullQuotaFallback(at: Date())
     }
 
     private var sampleSnapshot: CodexQuotaSnapshot {
@@ -156,7 +156,7 @@ private struct CodexQuotaWidgetView: View {
                     innerRadius: 49.0
                 )
 
-                Text(percent.map { "\($0)%" } ?? "--")
+                Text(entry.snapshot.isFullQuotaFallback ? "??" : (percent.map { "\($0)%" } ?? "--"))
                     .font(.system(size: percentFontSize, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                     .frame(width: ringSize * 0.62, height: ringSize * 0.30)
@@ -202,6 +202,10 @@ private struct CodexQuotaWidgetView: View {
     }
 
     private func refreshText(percent: Int?, resetAt: Date?, style: QuotaRefreshStyle) -> String {
+        if entry.snapshot.isFullQuotaFallback {
+            return ""
+        }
+
         guard let percent, let resetAt else {
             return "暂无数据"
         }

@@ -195,3 +195,21 @@ Cause: `logs_2.sqlite` 里除了真实 `codex.rate_limits` 外，还会记录 as
 Solution: 日志查询改为返回 `id / ts / ts_nanos / target / feedback_log_body`，解析阶段只接受真实 HTTP `headers={...}` 或真实 websocket 顶层 `type == "codex.rate_limits"`；快照只新增可选 `sourceEventAt` 表示库里的额度事件时间。宿主同时读取 logs 和 rollout 候选，选择 `sourceEventAt` 最新的真实额度；没有新数或读取失败时保留最后一次好快照。Widget 从三份 JSON 中选择最新 `ok` 快照；Widget timeline 兜底改为 1 分钟，宿主继续 20 秒刷新。
 Verification: 新增假命中、模型线路额度、logs 旧而 rollout 新、旧 fallback 覆盖、新旧 JSON 选择测试；`swift run CodexQuotaWidgetVerification` 已通过。
 Avoid next time: 不要把 SQL `LIKE` 命中当成最终额度事件；必须二次解析 JSON 类型，并用来源事件时间防止旧值回灌。
+
+Issue: 宿主 App 预览和真实桌面 Widget 视觉差距过大。
+Cause: 宿主预览用了两个独立大卡片和 `166pt` 圆环展示，虽然数据相同，但尺寸、卡片结构和环参数都不同于真实 `344x164` 中号 Widget，预览会显得像另一套 UI。
+Solution: 宿主预览改为单张 `344:164` 中号 Widget 比例卡片，内部复用同样的 `HStack + VStack` 结构、`136pt` 圆环上限、`36` 段、`61.788 / 49.0` 半径和 `8.0 / 5.6` 方块参数；只保留宿主内用于模拟桌面背景的轻量卡片背景。
+Verification: `swift run CodexQuotaWidgetVerification` 通过；Debug `xcodebuild -project CodexQuotaDesktop.xcodeproj -scheme CodexQuotaDesktop -configuration Debug CODE_SIGNING_ALLOWED=NO build -quiet` 通过。
+Avoid next time: 宿主预览应优先按真实 Widget 尺寸和参数渲染，不要为了展示效果单独放大成另一套卡片。
+
+Issue: 早上未对话时本地 logs / rollout 额度停在昨晚，但 Codex 客户端设置页能显示最新额度。
+Cause: `~/.codex/sqlite/logs_2.sqlite` 和 rollout JSONL 都是“最近一次服务端事件”的本地记录；没有新对话或服务端事件写入时不会自然更新。Codex 客户端设置页会带 `~/.codex/auth.json` 里的 access token 主动请求 `https://chatgpt.com/backend-api/wham/usage`，响应顶层 `rate_limit.primary_window / secondary_window` 才是设置页的新鲜额度；`additional_rate_limits` 仍是模型线路额度，不用于 Widget 主显示。
+Solution: 宿主 App 继续每 20 秒读取本地 logs / rollout，优先使用最新真实本地总额度事件；只有已知额度事件超过 10 分钟没有更新时，才低频请求 `/backend-api/wham/usage` 作为补偿。每次请求后随机安排下一次补偿请求，约为 20 分钟上下 5 分钟，避免固定节拍；请求失败或没有新数时保留最后一次 ok 快照，不写回旧值。
+Verification: 新增 `testBuildsSnapshotFromCodexUsageResponse`，确认 `/wham/usage` 响应只读取顶层 `rate_limit`，忽略 `additional_rate_limits`；`swift run CodexQuotaWidgetVerification` 通过。
+Avoid next time: 不要把实时 API 接成高频轮询；默认相信本地服务端日志，只有日志长期不动时低频补一次 Codex 客户端同源 usage 接口。
+
+Issue: 首次打开且本机没有任何可读额度来源时，宿主和 Widget 会显示 unavailable。
+Cause: 空机器、未登录 Codex 或 Codex 从未写过本地日志时，本地 logs / rollout 和低频 API 都可能没有候选快照。
+Solution: 只有在本地和 API 都没有候选时，生成 `100/100` 的 ok 兜底快照；显示层识别无来源的满额兜底，外圈保持满环，但中心显示 `??` 且不显示重置时间。真实额度事件一旦出现，会按 `sourceEventAt` 正常替换它。
+Verification: 新增 `testFullQuotaFallback`，确认兜底快照为 `100/100`，重置时间按 5 小时和 1 周填充，并能被识别为 fallback。
+Avoid next time: 空状态不要回到 unavailable，也不要直接显示 `100%`；默认满额只是无数据兜底，不参与真实额度解析。

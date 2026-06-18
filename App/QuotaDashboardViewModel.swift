@@ -15,11 +15,15 @@ final class QuotaDashboardViewModel: ObservableObject {
     private var stateWatcher: FileWatcher?
     private var rolloutWatcher: FileWatcher?
     private var sourceSidecarWatcher: FileWatcher?
+    private var nextUsageAPIRefreshDate: Date?
 
     private static let widgetBackgroundOpacityKey = "widgetBackgroundOpacity"
     private static let widgetBackgroundStyleKey = "widgetBackgroundStyle"
     private static let widgetBackgroundColorKey = "widgetBackgroundColor"
     private static let defaultWidgetBackgroundOpacity = 0.18
+    private static let localQuotaStaleInterval: TimeInterval = 10 * 60
+    private static let usageAPIBaseRefreshInterval: TimeInterval = 20 * 60
+    private static let usageAPIRefreshJitter: TimeInterval = 5 * 60
     private static let defaultWidgetBackgroundStyle: WidgetBackgroundStyle = .defaultColor
     private static let defaultWidgetBackgroundColor = WidgetBackgroundColor(
         red: 0.74,
@@ -46,11 +50,17 @@ final class QuotaDashboardViewModel: ObservableObject {
     }
 
     func refresh() {
+        Task { @MainActor in
+            await refreshNow()
+        }
+    }
+
+    private func refreshNow() async {
         let now = Date()
 
         do {
             let candidateSnapshot = applyWidgetAppearance(
-                to: try CodexQuotaSnapshotBuilder.buildFromLocalCodexState(now: now)
+                to: try await buildCandidateSnapshot(now: now)
             )
             lastErrorMessage = nil
             lastRefreshDate = now
@@ -82,6 +92,64 @@ final class QuotaDashboardViewModel: ObservableObject {
         }
 
         WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    private func buildCandidateSnapshot(now: Date) async throws -> CodexQuotaSnapshot {
+        var candidates: [CodexQuotaSnapshot] = []
+
+        if let localSnapshot = try? CodexQuotaSnapshotBuilder.buildFromLocalCodexState(now: now) {
+            if localSnapshot.state == .ok {
+                candidates.append(localSnapshot)
+            }
+        }
+
+        let localSnapshot = candidates.max { lhs, rhs in
+            lhs.freshnessDate < rhs.freshnessDate
+        }
+
+        if shouldRefreshUsageAPI(now: now, localSnapshot: localSnapshot) {
+            scheduleNextUsageAPIRefresh(after: now)
+            if #available(macOS 10.15, *),
+               let apiSnapshot = try? await CodexQuotaSnapshotBuilder.buildFromCodexUsageAPI(now: now) {
+                candidates.append(apiSnapshot)
+            }
+        }
+
+        if let bestSnapshot = candidates.max(by: { lhs, rhs in lhs.freshnessDate < rhs.freshnessDate }) {
+            return bestSnapshot
+        }
+
+        return .fullQuotaFallback(at: now)
+    }
+
+    private func shouldRefreshUsageAPI(now: Date, localSnapshot: CodexQuotaSnapshot?) -> Bool {
+        guard canRefreshUsageAPI(now: now) else {
+            return false
+        }
+
+        let knownFreshnessDates = [
+            localSnapshot?.freshnessDate,
+            snapshot.state == .ok ? snapshot.freshnessDate : nil
+        ].compactMap { $0 }
+
+        guard let freshestKnownDate = knownFreshnessDates.max() else {
+            return true
+        }
+
+        return now.timeIntervalSince(freshestKnownDate) >= Self.localQuotaStaleInterval
+    }
+
+    private func canRefreshUsageAPI(now: Date) -> Bool {
+        guard let nextUsageAPIRefreshDate else {
+            return true
+        }
+
+        return now >= nextUsageAPIRefreshDate
+    }
+
+    private func scheduleNextUsageAPIRefresh(after date: Date) {
+        let jitter = Double.random(in: -Self.usageAPIRefreshJitter...Self.usageAPIRefreshJitter)
+        nextUsageAPIRefreshDate = date.addingTimeInterval(Self.usageAPIBaseRefreshInterval + jitter)
     }
 
     func setWidgetBackgroundOpacity(_ opacity: Double) {
@@ -142,7 +210,7 @@ final class QuotaDashboardViewModel: ObservableObject {
     private func startRefreshTimer() {
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.refresh()
+                await self?.refreshNow()
             }
         }
     }
@@ -151,7 +219,7 @@ final class QuotaDashboardViewModel: ObservableObject {
         let stateDatabaseURL = CodexQuotaPaths.defaultStateDatabaseURL
         stateWatcher = FileWatcher(url: stateDatabaseURL) { [weak self] in
             Task { @MainActor [weak self] in
-                self?.refresh()
+                await self?.refreshNow()
             }
         }
     }
@@ -166,7 +234,7 @@ final class QuotaDashboardViewModel: ObservableObject {
 
         rolloutWatcher = FileWatcher(url: URL(fileURLWithPath: path)) { [weak self] in
             Task { @MainActor [weak self] in
-                self?.refresh()
+                await self?.refreshNow()
             }
         }
 
@@ -174,7 +242,7 @@ final class QuotaDashboardViewModel: ObservableObject {
             let walURL = URL(fileURLWithPath: path + "-wal")
             sourceSidecarWatcher = FileWatcher(url: walURL) { [weak self] in
                 Task { @MainActor [weak self] in
-                    self?.refresh()
+                    await self?.refreshNow()
                 }
             }
         }

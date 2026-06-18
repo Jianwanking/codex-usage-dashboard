@@ -93,6 +93,23 @@ public struct CodexQuotaSnapshot: Codable, Equatable, Sendable {
         )
     }
 
+    public static func fullQuotaFallback(at snapshotAt: Date) -> CodexQuotaSnapshot {
+        CodexQuotaSnapshot(
+            state: .ok,
+            fiveHourRemainingPercent: 100,
+            fiveHourResetAt: snapshotAt.addingTimeInterval(300 * 60),
+            weekRemainingPercent: 100,
+            weekResetAt: snapshotAt.addingTimeInterval(10_080 * 60),
+            snapshotAt: snapshotAt,
+            planType: nil,
+            sourceRolloutPath: nil,
+            sourceEventAt: nil,
+            widgetBackgroundOpacity: nil,
+            widgetBackgroundStyle: nil,
+            widgetBackgroundColor: nil
+        )
+    }
+
     public func withWidgetAppearance(
         opacity: Double,
         style: WidgetBackgroundStyle,
@@ -112,6 +129,15 @@ public struct CodexQuotaSnapshot: Codable, Equatable, Sendable {
             widgetBackgroundStyle: style,
             widgetBackgroundColor: color
         )
+    }
+
+    public var isFullQuotaFallback: Bool {
+        state == .ok
+            && fiveHourRemainingPercent == 100
+            && weekRemainingPercent == 100
+            && planType == nil
+            && sourceRolloutPath == nil
+            && sourceEventAt == nil
     }
 }
 
