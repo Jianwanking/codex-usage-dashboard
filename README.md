@@ -4,6 +4,8 @@
 
 > Unofficial project. This is not affiliated with OpenAI.
 
+![demo](demoimage.png)
+
 ## 功能
 
 - macOS 中号 Widget：双环显示 5 小时 / 1 周剩余额度。
